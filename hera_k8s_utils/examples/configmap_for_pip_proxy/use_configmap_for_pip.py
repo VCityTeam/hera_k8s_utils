@@ -79,8 +79,8 @@ def list_mounted_partitions(
 if __name__ == "__main__":
     # A workflow that tests whether the defined environment is correct as
     # seen and used from within the Argo server engine (at Workflow runtime)
-    from parser import parser
-    from environment import environment
+    from .parser import parser
+    from .environment import environment
     from hera.workflows import (
         Container,
         DAG,

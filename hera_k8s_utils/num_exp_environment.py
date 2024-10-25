@@ -32,23 +32,23 @@ class num_exp_environment(Struct):
         self.cluster = types.SimpleNamespace()
 
     def assert_k8s_and_argo_servers(self, args, verbose):
-        ### First start by asserting that both the k8s cluster and the argo
-        # server where properly configured (within the args) and can be
-        # "initialized".
-        # Notice that both those servers are (technically) used in this
-        # constructor yet they do not belong are NOT stored in the numerical experiment environment.
-        k8s = k8s_cluster(args)
-        k8s.assert_cluster()
-        if verbose:
-            k8s.print_config()
-            print("Kubernetes cluster seems ok.")
-
-        # Then transmit to Hera what it requires in order to properly
-        # submit the workflows.
+        ### First start by asserting that the argo server was properly
+        # configured (by the args) and "initialize" the Hera library.
+        # Notice that this Hera initialization is a technical side effect of
+        # this constructor. Yet this class does NOT need to keep a reference of
+        # this argo server.
         argo = argo_server(args)
         if verbose:
             argo.print_config()
             print("Argo server looks ok.")
+
+        ### Then proceed by asserting that the k8s cluster access was properly
+        # configured (by the args).
+        self.k8s = k8s_cluster(args)
+        self.k8s.assert_cluster()
+        if verbose:
+            self.k8s.print_config()
+            print("Kubernetes cluster seems ok.")
 
     def print_config(self):
         print("Environment of numerical experiment (at Python level):")

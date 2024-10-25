@@ -46,8 +46,8 @@ def assert_configmap_environment(
 if __name__ == "__main__":
     # A workflow that tests whether the environment variables defined in
     # a Configmap can be retrieved (at Workflow runtime)
-    from parser import parser
-    from environment import environment
+    from .parser import parser
+    from .environment import environment
     from hera.workflows import (
         Container,
         DAG,

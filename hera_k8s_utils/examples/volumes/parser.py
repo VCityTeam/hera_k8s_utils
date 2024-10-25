@@ -11,21 +11,24 @@ class parser:
 
         # Add the locally defined parser extensions
         self.parser.add(
-            "--k8s_configmap_name",
-            help="Name of the k8s configuration map used by cluster admin to transmit cluster specific configurations.",
+            "--k8s_volume_claim_name",
+            help="Name of the k8s volume claim to be used by numerical experiment.",
             type=str,
-            default=os.environ.get("KUBECONFIGMAP"),
+            default=os.environ.get("KUBEVOLUMECLAIMNAME"),
         )
 
     @staticmethod
     def verify_args(args):
-        # Eventually assert that the local extension is satisfied
-        if not hasattr(args, "k8s_config_file") or args.k8s_configmap_name is None:
-            print("The optional name of the k8s configuration map (used by")
-            print("cluster admin to transmit cluster specific configurations).")
+        """Assert that the local configuration extension is satisfied"""
+        if (
+            not hasattr(args, "k8s_volume_claim_name")
+            or args.k8s_volume_claim_name is None
+        ):
+            print("The optional name of the k8s volume claim name (used by")
+            print("the numerical experiment to access a filesystem volume).")
             print("was not provided. When needed either try")
-            print("  - setting the KUBECONFIGMAP environment variable")
-            print("  - setting the --k8s_configmap_name argument")
+            print("  - setting the KUBEVOLUMECLAIMNAME environment variable")
+            print("  - setting the --k8s_volume_claim_name argument")
             print("hera_k8s_utils: exiting.")
             sys.exit(1)
 
