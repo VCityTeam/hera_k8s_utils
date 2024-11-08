@@ -28,20 +28,20 @@ sequenceDiagram
 
 Notes:
 
-- A service account token and `ARGO_TOKEN` are of different nature since they do _not_ provide access to the same service. 
+- A service account token and `ARGO_TOKEN` are of different nature since they do _not_ provide access to the same service.
   A service account token seem to provide access to the argo-server at the k8s level.
   Whereas an `ARGO_TOKEN` provides access to the Argo Server API.
   Both tokens also different by their format (an `ARGO_TOKEN` is prefixed with the `Bearer v2:` string)
 - This method is [not recommended since Kubernetes version 1.24](https://kubernetes.io/docs/concepts/security/service-accounts/#get-a-token)
   and token creation became restricted to manual mode starting from Kubernetes version 1.27.
-In this authentication mode the `ARGO_TOKEN` is setup by the cluster admin and stored as a secret within a k8s service account. 
+In this authentication mode the `ARGO_TOKEN` is setup by the cluster admin and stored as a secret within a k8s service account.
 It is the user's responsibility to retrieve this token through the usage of k8s API which imposes k8s access/authentication
 (basically a `KUBECONFIG` file).
 The sequence diagram is very similar to the above one except for the first stage of token retrieval.
 
 ```mermaid
 sequenceDiagram
-    title User uses kube config to submit a workflow
+    title User uses Kubernetes config to submit a workflow
     participant User
     participant KubeAPI as API Kubernetes
     participant ArgoServer as Argo Server
@@ -65,7 +65,7 @@ The sequence diagram is almost identical to the above one except for the method 
 
 ```mermaid
 sequenceDiagram
-    title User uses kube config to submit a workflow
+    title User uses Kubernetes config to submit a workflow
     participant User
     participant KubeAPI as API Kubernetes
     participant ArgoServer as Argo Server
@@ -79,7 +79,7 @@ sequenceDiagram
     ArgoServer-->>User: (success/failed)
 ```
 
-https://argo-workflows.readthedocs.io/en/latest/managed-namespace/
+Reference : [Argo managed-namespace](https://argo-workflows.readthedocs.io/en/latest/managed-namespace/).
 
 ## Notes concerning ArgoServer vs ArgoController vs KubeAPI
 
