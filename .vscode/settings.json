@@ -4,6 +4,13 @@
         "configmap",
         "cowsayprint",
         "hera",
+        "KUBECONFIG",
+        "Kurbenetes",
         "venv"
-    ]
+    ],
+    "_comment": "In order to use Markdown Command Runner",
+    "python.defaultInterpreterPath": "venv/bin/python3",
+    "terminal.integrated.env.osx": {
+        "PATH": "${workspaceFolder}/venv/bin/:${PATH}"
+    }
 }

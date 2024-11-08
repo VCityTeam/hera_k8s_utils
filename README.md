@@ -1,197 +1,345 @@
-# hera_utils: an embryonic python library of Hera workflows utilities<!-- omit from toc -->
+# hera_k8_utils: an embryonic python library of Hera workflows utilities<!-- omit from toc -->
 
 ## Table of contents<!-- omit from toc -->
 
 - [Introduction](#introduction)
-- [What `hera_utils` should help you set up: a functional description](#what-hera_utils-should-help-you-set-up-a-functional-description)
+- [Proposed organizational structure](#proposed-organizational-structure)
+- [Executing the Experiment](#executing-the-experiment)
+- [Combining `hera_utils` with `hera_k8s_utils`](#combining-hera_utils-with-hera_k8s_utils)
+- [What `hera_k8_utils` should help you set up: a functional description](#what-hera_k8_utils-should-help-you-set-up-a-functional-description)
 - [A more complete example](#a-more-complete-example)
-- [Configuring the access to the Kubernetes and Argo servers](#configuring-the-access-to-the-kubernetes-and-argo-servers)
+- [Configuring `hera_k8s_utils`](#configuring-hera_k8s_utils)
   - [Retrieve your Kurbenetes cluster credentials (for CLI usage)](#retrieve-your-kurbenetes-cluster-credentials-for-cli-usage)
-  - [Retrieve your Argo Server credentials (for CLI usage)](#retrieve-your-argo-server-credentials-for-cli-usage)
   - [Choosing a mode of persistence for you servers environment variables](#choosing-a-mode-of-persistence-for-you-servers-environment-variables)
-  - [hera\_utils configuration through environment variables](#hera_utils-configuration-through-environment-variables)
-  - [hera\_utils configuration through a configuration file](#hera_utils-configuration-through-a-configuration-file)
+  - [hera\_k8\_utils configuration through environment variables](#hera_k8_utils-configuration-through-environment-variables)
+  - [hera\_k8\_utils configuration through CLI flags/arguments](#hera_k8_utils-configuration-through-cli-flagsarguments)
+  - [hera\_k8\_utils configuration through a configuration file](#hera_k8_utils-configuration-through-a-configuration-file)
 - [Using (hera with) hera\_k8s\_utils](#using-hera-with-hera_k8s_utils)
-  - [`hera_utils` package installation](#hera_utils-package-installation)
+  - [`hera_k8_utils` package installation](#hera_k8_utils-package-installation)
   - [Configure hera\_k8s\_utils and assert that configuration (run some tests)](#configure-hera_k8s_utils-and-assert-that-configuration-run-some-tests)
   - [Run the examples](#run-the-examples)
 - [For developers](#for-developers)
   - [Setting up the development context](#setting-up-the-development-context)
-  - [Design](#design)
-- [Using Hera utils to submit a workflow](#using-hera-utils-to-submit-a-workflow)
-  - [Argo server (direct) authentication handling](#argo-server-direct-authentication-handling)
-  - [Authentication through a k8s service account's token secret (requires k8s authentication)](#authentication-through-a-k8s-service-accounts-token-secret-requires-k8s-authentication)
-  - [Generating an Argo Token out of a k8s service account (requires k8s authentication)](#generating-an-argo-token-out-of-a-k8s-service-account-requires-k8s-authentication)
-  - [Notes concerning ArgoServer vs ArgoController vs KubeAPI](#notes-concerning-argoserver-vs-argocontroller-vs-kubeapi)
-  - [K8s Prerequisites](#k8s-prerequisites)
-  - [Working on Argo](#working-on-argo)
-    - [Submitting a workflow](#submitting-a-workflow)
-      - [Using the kubeconfig file](#using-the-kubeconfig-file)
-      - [Using the Argo token](#using-the-argo-token)
+  - [Some notes](#some-notes)
+
 
 ## Introduction
 
-`hera_utils` is a Python package gathering helpers
+`hera_k8s_utils` is a Python package that
 
-- facilitating the abstraction/separation of [Hera-based workflows](https://github.com/argoproj-labs/hera) based scripts from the concrete servers that shall be used to run them,
-- proposing a simple/direct organizational structure of numerical experiments scripts based on [Hera (workflows)](https://github.com/argoproj-labs/hera).
+1. proposes a simple/direct **organizational structure** for numerical experiments scripts based on [hera (workflows)](https://github.com/argoproj-labs/hera),
+2. facilitates the description of the **[k8s](https://en.wikipedia.org/wiki/Kubernetes) ressources/dependencies** on which such an [`hera` script](https://github.com/argoproj-labs/hera) relies.
 
-The purpose of `hera_utils` boils down to a comment of the following diagrams
+`hera_k8s_utils` comes in complement of the [`hera_utils`](https://github.com/VCityTeam/hera_utils/blob/master/README.md) package (that focuses on the Argo Server part) in order to facilitate the abstraction/separation of [an hera based script](https://github.com/argoproj-labs/hera) from the concrete servers that shall be used to run them.
 
-```mermaid
-classDiagram
-class Experimentation["(Numerical) Experiment (description)"]
-class Environment["Environment (of execution)"]
-class Workflow["Workflow (HERA code)"]
-class WorkflowLanguage["ArgoWorkflows (HERA language)"]
-class Layout["Layout (files' organization)"]
-class Inputs["Inputs (parameters)"]
-Experimentation o-- Workflow
-Workflow ..> WorkflowLanguage
-Experimentation o-- Layout
-Experimentation o-- Inputs
-Experimentation o-- Environment
-```
+## Proposed organizational structure
 
-The description of a (numerical) experiment (more generally a set of jobs) may be structured on top of the following separated concerns:
-- the expression of the specific atomic computations (tasks) that should be realized and their possible organization within a [**computational workflow**](https://en.wikipedia.org/wiki/Scientific_workflow_system) e.g. [Hera](https://github.com/argoproj-labs/hera)
-- the experiment **inputs**: what concrete set of parameters should be used
-- the experiment **layout** (naming convention, organizational structure) of its inputs/outputs: where (in which file, directory, database...) does each task take its (file) inputs from and where does that task store its outputs to (and how does it name them)
-- the (execution) environment that is the set of resources required for the execution of the experiment e.g. a [persistent volume](https://kubernetes.io/docs/concepts/storage/persistent-volumes/), a container registry...
-
-Once given (the description of) an Experiment, one uses an `execution engine` in order to proceed with its realization. When executing an Experiment, the ArgoWorkflows engine (say a Python interpreter) will
-
-1. [provision](https://en.wikipedia.org/wiki/Provisioning) a concrete instance of the Environment (of execution),
-2. launch the computations (most often) by delegating/submitting it to Workflow to some ArgoWorkflows server. The set of information required for that submission is gathered within an Environment of submission.
-
-The execution engine will thus need to hold the following data model
+The expression of an `hera_k8_utils` based numerical experiment script, uses the underlying organizational structure of the `hera_k8_utils` package. This structure boils down to a comment of the following diagrams
 
 ```mermaid
 classDiagram
-
 class Experiment {
-        - Workflow
-        - Layout
-        - Inputs
+    - Inputs
+    - Configuration files
 }
 style Experiment fill:#1a1
-class EnvironmentExecution[":Environment (of execution)"]
-<<hera_utils>> EnvironmentExecution
-style EnvironmentExecution fill:#faa
+
+class Environment {
+    k8s ressources
+}
+style Environment fill:#1a1
+
+class Workflow {
+    <<hera code>>
+}
+style Workflow fill:#1a1
+
+class Layout {
+    directory structure
+    filenames
+    container names
+}
+style Layout fill:#1a1
+
+Experiment o-- Environment
+Workflow ..> Environment : uses
+Experiment o-- Workflow
+Workflow ..> Layout : uses
+Experiment o-- Layout
+```
+
+It is thus proposed to structure the description of a (numerical) **experiment** (more generally a set of jobs) on top of the following separated concerns:
+
+- (the experiment) **inputs**: what concrete set of parameters should be used,
+- (the experiment) **layout** (naming convention, organizational structure) of its inputs/outputs: where (in which file, directory, database...) does each task take its (file) inputs from and where does that task store its outputs to (and how does it name them)
+- the **environment** (of execution of the experiment) that is the set of resources required for the execution of the experiment. T  e.g. a [persistent volume](https://kubernetes.io/docs/concepts/storage/persistent-volumes/), a container registry...
+- as set of **configuration files** describing the serialization of the environment of execution,
+- eventually a [**workflow**](https://en.wikipedia.org/wiki/Scientific_workflow_system) that expresses the specific set atomic computations (tasks) that should be realized and their possible organization (as expressed with the [`hera` workflows language](https://github.com/argoproj-labs/hera)). The workflow description is itself based on the experiment layout and environment.
+
+## Executing the Experiment
+
+Once given (the description of) an Experiment, one uses an `execution engine` in order to proceed with its realization. When executing an Experiment, the ExecutionEngine will
+
+1. [provision](https://en.wikipedia.org/wiki/Provisioning) a concrete instance of the Environment (of execution as opposed to the environment of submission),
+2. launch the computations (most often) by delegating/submitting the Workflow to some Argo Server. The set of information required for that execution is gathered within an Environment that will use `hera_k8s_utils` for its description.
+
+The execution engine will thus use the "data model" proposed by a `hera_k8s_utils` Experiment
+
+```mermaid
+classDiagram
+
+%% Entities/Nodes
+
+class Experiment {
+        - Inputs
+        - Configuration files
+}
+style Experiment fill:#1a1
+
+class Workflow {
+    <<Python>>
+}
+style Workflow fill:#1a1
+
+class Environment {
+<<Python>>
+k8s ressources
+}
+style Environment fill:#1a1
+
+class Layout
+style Layout fill:#1a1
+
+class hera {
+  <<package>>
+}
+
+class hera_k8s_utils {
+  <<package>>
+}
+style hera_k8s_utils fill:#faa
+
+class CLIContext["ConfigArgParse"]
+<<package>> CLIContext
+style CLIContext fill:#faa
+
+namespace ExecutionContext {
+    class ExecutionEngine
+    class ExecutionPlatform["Execution Platform"]
+    class Cluster["Kubernetes Cluster"]
+}
+
+%% Relationships
+
+Workflow ..> Layout: uses
+Experiment o-- Layout
+Experiment o-- Workflow
+Experiment o-- Environment
+
+Workflow ..> Environment: uses
+Workflow ..> hera:uses
+
+ExecutionEngine ..> ExecutionPlatform: uses
+ExecutionEngine ..> Experiment: uses
+
+Environment ..> hera_k8s_utils
+
+hera_k8s_utils ..> CLIContext: uses
+hera_k8s_utils --> Cluster : asserts with
+
+ExecutionPlatform *-- Cluster
+```
+
+## Combining `hera_utils` with `hera_k8s_utils`
+
+When describing an Experiment one needs to simultaneously define the both aspects of its Environment:
+
+- the **environment of execution** for which one can use the `hera_k8s_utils` package
+- the **environment of submission** for which one can use the [`hera_utils` package](https://github.com/VCityTeam/hera_utils/).
+
+The integrated resulting structure of the Experiment is depicted by the following diagram
+
+```mermaid
+classDiagram
+
+%% Entities/Nodes
+
+namespace ExperimentDescription {
+    class Experiment {
+            - Inputs
+            - Configuration files
+    }
+
+    class Workflow {
+        <<Python>>
+    }
+
+    class Environment {
+        <<Python>>
+        k8s ressources
+    }
+
+    class Layout
+}
+style Experiment fill:#1a1
+style Workflow fill:#1a1
+style Environment fill:#1a1
+style Layout fill:#1a1
+
+namespace Packages {
+    class hera {
+        <<package>>
+    }
+
+    class hera_k8s_utils {
+        <<package>>
+    }
+
+    class ConfigArgParse {
+        <<package>>
+    }
+
+    class hera_utils {
+        <<package>>
+    }
+
+}
+%% Style command cannot be used within namespace
+style hera_k8s_utils fill:#faa
+style ConfigArgParse fill:#faa
+
+namespace ExecutionContext {
 
 class ExecutionPlatform["Execution Platform"]
-style ExecutionPlatform fill:#aaf
-class WorkflowEngine["ArgoWorkflows Server"]
-style WorkflowEngine fill:#aaf
 class Cluster["Kubernetes Cluster"]
-style Cluster fill:#aaf
 
-class CLIContext[":Parsed Command Line Arguments"]
-<<hera_utils>> CLIContext
-style CLIContext fill:#faa
 class ExecutionEngine
 
-class EnvironmentSubmission[":Environment (of submission: HERA)"]
-<<hera_utils>> EnvironmentSubmission
-style EnvironmentSubmission fill:#faa
+class WorkflowEngine["ArgoWorkflows Server"]
+}
 
-ExecutionEngine *-- EnvironmentSubmission
-ExecutionEngine ..> ExecutionPlatform: depends
+%% Relationships
 
-ExecutionEngine o-- Experiment
-Experiment o-- EnvironmentExecution
-ExecutionEngine *-- EnvironmentExecution
+Workflow ..> Layout: uses
+Workflow ..> Environment: uses
+
+Experiment o-- Layout
+Experiment o-- Workflow
+Experiment o-- Environment
 
 
-EnvironmentExecution ..> CLIContext: constructed with
-ExecutionEngine *-- CLIContext
-EnvironmentSubmission ..> CLIContext: constructed with
+Workflow ..> hera:uses
 
-CLIContext --> WorkflowEngine
-EnvironmentSubmission o-- WorkflowEngine
+ExecutionEngine ..> ExecutionPlatform: uses
+ExecutionEngine ..> Experiment: uses
 
-EnvironmentExecution o-- Cluster
-CLIContext --> Cluster
-WorkflowEngine ..> Cluster
+Environment ..> hera_k8s_utils : uses
+
 ExecutionPlatform *-- Cluster
-
+WorkflowEngine ..> Cluster
+hera_k8s_utils --> Cluster : asserts with
 ExecutionPlatform *-- WorkflowEngine
+
+Environment ..> hera_utils : uses
+
+hera_utils ..> ConfigArgParse: uses
+hera_k8s_utils ..> ConfigArgParse: uses
+hera_utils ..> hera : configures authentication
+
+hera --> WorkflowEngine: submits to
 ```
 
-The objects depicted with the `<<hera_utils>>` [(UML) stereotype](https://www.uml-diagrams.org/stereotype.html) are susceptible to benefit from the `hera_utils` package.
+## What `hera_k8_utils` should help you set up: a functional description
 
-## What `hera_utils` should help you set up: a functional description
+Under the hood hera_k8_utils allows for the following definitions
 
 ```python
-import hera_utils
+import hera_k8_utils
 
 # Make sure that all the elements of the HERA context can be extracted from either
-# the Command Line Arguments (CLI) or the environment variables:
-args = hera_utils.parse_arguments()      
+# the Command Line Arguments (CLI), the environment variables or the configuration
+# files:
+args = hera_k8_utils.parser().parse_args()    
 
-# Assert that the k8s cluster (designated by the CLI arguments) is accessible:
-cluster = hera_utils.k8s_cluster(args)
+# Define a (basic/simple) Environment
+environment = hera_k8_utils.num_exp_environment(args)
 
-# Assert that the ArgoWorkflows server (also designated by the CLI arguments and running
-# on the above cluster), is accessible:
-argo_server = hera_utils.argo_server(cluster, args)
-
-# Eventually transmit to the Hera workflow the environment of submission that it expects
-# (the argo server, an associated access token, the ad-hoc namespace...): 
-argo_server.define_argo_server_part_of_environment()
+# Note: the constructor num_exp_environment(args) asserts both that
+#  - the argo server (to be used for workflow submission)
+#  - the k8s cluster (where some ressources were defined)
+# are accessible by calling
+#      cluster = hera_k8_utils.cluster(args)
 ```
 
-Your Python script (more precisely, your Experiment expressed as a Python script) can now proceed with expressing its dependencies, that is its environment (of execution), input and layout
+Your Python script (more precisely, your Experiment expressed as a Python script) can define
+
+- its own environment (though derivation of `hera_k8_utils.num_exp_environment`)
+- its inputs,
+- its layout
 
 ```python
-from environment import numerical_experiment_environment
-environment = numerical_experiment_environment(cluster, args)
+import hera_k8_utils
+
+args = hera_k8_utils.parser().parse_args() 
+
+# The environment is based on hera_k8s_utils.num_exp_environment
+from my_environment import environment 
+environment = environment(args)
+
 from my_specific_input import inputs
+
 from my_experiment_layout import experiment_layout
-layout = experiment_layout(inputs.constants)
+layout = experiment_layout(args, inputs.constants)
 ```
 
-Eventually define the workflow code with the Hera library and on top of the environment, input and layout variables
+Eventually your Experiment will define the Workflow code with the help of the Hera library package on top of the environment, input and layout variables
 
 ```python
-define_hera_workflow(environment, input, layout)   # Based-on/uses hera.workflows
+define_hera_workflow(environment, input, layout)   # Uses hera.workflows
 ```
 
 ## A more complete example
 
-The above code snippets were voluntarily sketchy/abstract in order to simplify the understanding of the functional logic of a (Hera-based) Experiment.
-The following example slightly improves on the usage of `hera_utils` by hiding technical functional details under the hood: refer to the [`numerical_experiment_environment::construct_environment(args)` method within `examples/environment.py`](./examples/environment.py) for some clues on how this encapsulation is realized.
-
-Additionally, the following code also provides more detailed comments
+The following example slightly complements the usage of `hera_k8_utils` by providing a Workflow
+(refer to [`examples/volumes` example](./hera_k8s_utils/examples/volumes/) for the full examples)
+together with some more detailed comments
 
 ```python
 if __name__ == "__main__":
-        from hera_utils import parse_arguments
-        # Retrieve the parsed CLI arguments and environment variables (of the Python script)
-        # that designate (and provide access to e.g. through credentials):
-        #   1. a `k8s_cluster`: an accessible Kubernetes cluster
-        #   2. an `argo_server`: an ArgoWorkflows server (running on the above k8s cluster)
-        # Hera (when interpreted with Python) will use this `argo_server` to submit the workflow 
-        # (that is the server on which the following workflow will be executed):
-        args = parse_arguments()
 
-        from environment import construct_environment
-        # The environment might also depend on the CLI argument and/or environment variables in
-        # order for the numerical experiment to retrieve e.g. 
-        # - some k8s volume claims (for its inputs/outputs)
-        # - k8s config maps used to retrieve cluster-specific information (HTTP proxy...)
-        # The construct_environment() function encapsulates/hides 
-        # - the usage of the k8s_cluster to provision the Experiment execution environment
-        # - the construction of the Hera (library) submission environment
-        environment = construct_environment(args)
+    # Retrieve the parsed CLI arguments and/or environment variables (of the Python script)
+    # and/or the configuration files that designate (and provide access to e.g. 
+    # through credentials):
+    #   1. a `k8s_cluster`: an accessible Kubernetes cluster
+    #   2. an `argo_server`: an ArgoWorkflows server (running on the above k8s cluster)
+    # Hera (when interpreted with Python) will use this `argo_server` to submit the workflow 
+    # (that is the server on which the following workflow will be executed).
+    # The local parser aggregated and extend the hera_k8s_utils default parser, that
+    # is it defined something like
+    #      class parser:
+    #          """Extend the default parser with the local needs"""
+    #          def __init__(self):
+    #              self.parser = hera_k8s_utils_parser().get_parser()
+    #              self.parser.add( .... )
+    from .my_parser import parser
+    args = parser().parse_args()
 
-        # Import the inputs (aka parameters) of this numerical experiment
-        from my_specific_input import inputs
+    from .my_environment import environment
+    # The environment might also depend on the CLI argument and/or environment variables in
+    # order for the numerical experiment to retrieve e.g. 
+    # - some k8s volume claims (for its inputs/outputs)
+    # - k8s config maps used to retrieve cluster-specific information (HTTP proxy...)
+    # The construct_environment() function encapsulates/hides 
+    # - the usage of the k8s_cluster to provision the Experiment execution environment
+    # - the construction of the Hera (library) submission environment
+    environment = environment(args)
 
-        #
+    # Import the inputs (aka parameters) of this numerical experiment
+    from .my_specific_input import inputs
+
     # filenames for each task...)
     from my_experiment_layout import experiment_layout
-    layout = layout(inputs.constants)
+    layout = layout(args, inputs.constants)
 
     # Proceed with the definition of the workflow that is solely based on the above
     # defined abstractions/encapsulations that is the
@@ -238,16 +386,14 @@ if __name__ == "__main__":
     w.create()
 ```
 
-## Configuring the access to the Kubernetes and Argo servers
+## Configuring `hera_k8s_utils`
 
-The execution of a given Hera workflow requires
+At runtime (that is when the Experiment is executed), `hera_k8s_utils` requires an access to the Kubernetes cluster on top of which the Argo Server is running.
+This allows to assert that the cluster resources (e.g. some persisted volume) required by the workflow are indeed available.
 
-- the mandatory knowledge of an Argo Server that shall be used by (Python using) Hera to submit the considered workflow,
-- the optional knowledge of the underlying Kubernetes cluster when the considered workflow requires some cluster resources (e.g. some persisted volume that the workflow must use for its file based input/output).
+Note: the existence of Kubernetes cluster is already mandatory since it is a requirement for the existence of the Argo Server. What is optional is the workflow knowledge of that k8s cluster. Indeed the workflow execution might not need any Kubernetes ressource.
 
-Note: the existence of Kubernetes cluster is mandatory since it is a requirement for the existence of the Argo Server. What is optional is the workflow knowledge of that cluster: the workflow execution might indeed not require any precondition that should be asserted at Kubernetes cluster level.
-
-In the following documentation we assume the considered workflow requires access to both the Kubernetes and the Argo server.
+In the following documentation we assume the considered Workflow requires access to both the Argo Server (thus using `hera_utils` for its submission) and the Kubernetes cluster (thus using `hera_k8s_utils`).
 
 ### Retrieve your Kurbenetes cluster credentials (for CLI usage)
 
@@ -260,44 +406,21 @@ Once you retrieved the ad-hoc `kubeconfig` file, that you renamed e.g. `my_clust
 
 ```bash
 export KUBECONFIG=`pwd`/my_cluster_kubeconfig.yaml   # Make it an absolute path
-kubectl get nodes                                    # or e.g. "kubectl get pods"
+export NAMESPACE=argo-dev
+kubectl -ns ${NAMESPACE} get nodes                   # or e.g. "kubectl get pods"
 ```
-
-### Retrieve your Argo Server credentials (for CLI usage)
-
-In analogy with the retrieval of a Kubernetes Cluster credentials, the retrieval of your Argo Server credentials (for CLI level access) can be done through the Argo Server web-UI.
-
-The credentials of the Argo server of the PAGoDA platform must also be retrieved
-through the UI of the Argo server of the PAGoDA platform.
-For this web browse to <https://argowf.pagoda.os.univ-lyon1.fr/> and use
-the `Single Sign ON` login mode to provide your LIRIS lab credentials (just as
-for the Kubernetes cluster credential, these credentials are the ones defined
-in LIRIS'
-[ldap](https://en.wikipedia.org/wiki/Lightweight_Directory_Access_Protocol)
-server).
-
-Once authenticated on your Argo Server Web UI
-
-- select the `User` Tab within the left icon bar,
-- within the `Using Your Login With The CLI` section of the `User` page use the `Copy to clipboard` button to retrieve your credentials (in the form of a set of environment variables e.g. `ARGO_SERVER`),
-- trigger a shell and define those environment variables within that shell (paste the commands held in the "clipboard"),
-- if not already done, install [argo CLI](https://github.com/argoproj/argo-workflows/releases/),
-- assert that you can access your Argo Server with `argo CLI` e.g. with the commands
-  
-  ```bash
-  argo list
-  ```
 
 ### Choosing a mode of persistence for you servers environment variables
 
-`hera_utils` offers two concrete means (that can be combined) for configuring the servers that an Hera workflow scripts will need to access to:
+`hera_k8_utils` offers three concrete means (that can be combined) for configuring the servers that an Hera workflow script will need to access to:
 
 - by using environment variables: this assumes that it is the responsibility of the user to persist the required environment variables (most often within a [shell script](https://en.wikipedia.org/wiki/Shell_script) e.g. [this argo.bash script](./examples/argo.bash.tmpl)),
-- an ad-hoc `hera_utils` configuration file (e.g. [this hera.config file](./examples/hera.config.tmpl)).
+- through your python script CLI flags and arguments (e.g. `python experiment.py --my_parameter 10`)
+- an ad-hoc `hera_k8_utils` configuration file (e.g. [this hera.config file](./hera_k8s_utils/examples/volumes/hera.config.tmpl)),
 
-The two following chapters respectively present the two above way of things.
+The three following chapters briefly present the above ways of things.
 
-### hera_utils configuration through environment variables
+### hera_k8_utils configuration through environment variables
 
 The above mentioned environment variables, `KUBECONFIG`, `ARGO_SERVER`, `ARGO_NAMESPACE` can be persisted with some shell script file e.g. your [shell](https://en.wikipedia.org/wiki/Unix_shell) rc [(run command)](https://en.wikipedia.org/wiki/RUNCOM) e.g. your `~/.bash_login` or `~/.bashrc` file or some local file.For example you might rename [the `argo.bash.tmpl` script](./examples/argo.bash.tmpl) to e.g. `argo.bash` and customize it.
 This script can then be imported into your current active shell
@@ -316,13 +439,25 @@ This script can then be imported into your current active shell
   
   and invoking the `importenv argo.bash` command from your current active shell.
 
-### hera_utils configuration through a configuration file
+### hera_k8_utils configuration through CLI flags/arguments
 
-For this `hera_utils` configuration mode, rename the [this hera.config file](./examples/hera.config.tmpl) and customize for your cluster, argo server and with your credentials.
+Once your provided an [extended parser class](./hera_k8s_utils/examples/configmap_for_pip_proxy/parser.py),
+the flags/arguments are documented by the command `python parser.py --help`.
+This functionality is provided by the [`ConfigArgParse`](https://github.com/bw2/ConfigArgParse) package (that itself extends [`python argparse`](https://docs.python.org/3/library/argparse.html).)
+
+### hera_k8_utils configuration through a configuration file
+
+For this `hera_k8_utils` configuration mode, provide and use an `hera.config` file (e.g. [this hera.config file](./hera_k8s_utils/examples/configmap_for_pip_proxy/hera.config.tmpl)) and customize it
+
+- for your cluster, argo server (with respective credentials),
+- your specific CLI flags.
+
+Notice that the structure of an `hera.config` file is tightly bound to the customized extension that were realized for the experiment (refer e.g. to this [extended parser class](./hera_k8s_utils/examples/configmap_for_pip_proxy/parser.py)).
+It is a recommend practice to provide a `__main__` part of your [extended parser class](./hera_k8s_utils/examples/configmap_for_pip_proxy/parser.py) that allows for simple assertion of the structure of a given `hera.config` file e.g. by running `python parser.py` in the directory holding the `hera.config` configuration file.
 
 ## Using (hera with) hera_k8s_utils
 
-### `hera_utils` package installation
+### `hera_k8_utils` package installation
 
 You might wish to use a [(python) virtual environment](https://packaging.python.org/en/latest/guides/installing-using-pip-and-virtual-environments/) and activate it e.g. with
 
@@ -365,7 +500,12 @@ python -m hera_k8s_utils.tests.check_k8s_server_availability
 
 ### Run the examples
 
-Then proceed with other hera scripts available as example modules provided in the [`hera_k8s_utils/examples` directory](hera_k8s_utils/examples/Readme.md).
+Then proceed with other hera experiments script available as example modules provided in the [`hera_k8s_utils/examples` directory](hera_k8s_utils/examples/Readme.md) e.g.
+Here is a set of `hera_k8s_utils` usage examples
+
+- [Simple example](./simple/Readme.md)
+- [Using a `ConfigMap` for proxy usage (within a container)](./configmap_for_pip_proxy/Readme.md)
+- [Assert volume claim mounting](./volumes/Readme.md)
 
 ## For developers
 
@@ -379,143 +519,6 @@ python3.10 -m venv venv
 python setup.py install      # Installs local version
 ```
 
-### Design
+### Some notes
 
-HERA utils: A python class that defines some HERA utils that are commonly used in the experiments  
-Layout: Used for defining the input/output layout of the application
-
-
-## Using Hera utils to submit a workflow
-
-As recalled by the [Hera authentication documentation](https://hera.readthedocs.io/en/stable/walk-through/authentication/)
-`the way you authenticate generally depends on your unique organization setup.`
-
-### Argo server (direct) authentication handling
-
-In this authentication setup, the user has to know and provide an `ARGO_SERVER` token.
-For this the user might retrieve his `ARGO_SERVER` token through the ARGO UI.
-The corresponding authentication sequence diagram goes
-
-```mermaid
-sequenceDiagram
-    title User uses Argo token to submit a workflow
-    participant User
-    participant ArgoServer as Argo Server
-
-    Note over User,ArgoServer: ARGO_TOKEN retrieval through ARGO_SERVER UI
-    User->>ArgoServer: Authentication via UI
-    ArgoServer-->>User: Argo token (success/failed)
-
-    Note over User,ArgoServer: submission of workflow to argo server
-    User->>ArgoServer: [Workflow + Argo token + namespace] Workflow submission
-    ArgoServer-->>User: (success/failed)
-```
-
-### Authentication through a k8s service account's token secret (requires k8s authentication)
-
-Notes:
-- A service account token and `ARGO_TOKEN` are of different nature since they do _not_ provide access to the same service. 
-  A service account token seem to provide access to the argo-server at the k8s level.
-  Whereas an `ARGO_TOKEN` provides access to the Argo Server API.
-  Both tokens also different by their format (an `ARGO_TOKEN` is prefixed with the `Bearer v2:` string)
-- This method is [not recommended since Kubernetes version 1.24](https://kubernetes.io/docs/concepts/security/service-accounts/#get-a-token)
-  and token creation became restricted to manual mode starting from Kubernetes version 1.27.
-In this authentication mode the `ARGO_TOKEN` is setup by the cluster admin and stored as a secret within a k8s service account. 
-It is the user's responsibility to retrieve this token through the usage of k8s API which imposes k8s access/authentication
-(basically a `KUBECONFIG` file).
-The sequence diagram is very similiar to the above one except for the first stage of token retrieval.
-
-```mermaid
-sequenceDiagram
-    title User uses kube config to submit a workflow
-    participant User
-    participant KubeAPI as API Kubernetes
-    participant ArgoServer as Argo Server
-
-    Note over User,KubeAPI: k8s service account token retrieval
-    User->>KubeAPI: [Kube config] Authentication + service account + namespace (k8s_cluster.v1.read_namespaced_service_account(service_account,namespace).secrets.name)
-    KubeAPI-->>User: Argo token (success/failed)
-
-    Note over User,ArgoServer: submission of workflow to argo server
-    User->>ArgoServer: [Workflow + Argo token + namespace] Workflow submission
-    ArgoServer-->>User: (success/failed)
-```
-
-References: for an Hera example refer to [this k8s_api.py example](https://github.com/argoproj-labs/hera/blob/39f685a382cfa9f2ce2a8c77657960748502fbe6/examples/k8s_sa.py#L39C9-L39C43).
-
-
-### Generating an Argo Token out of a k8s service account (requires k8s authentication)
-
-In this authentication mode the user asks the k8s cluster to generated an `ARGO_TOKEN`. 
-Again, the usage of k8s API imposes k8s access/authentication (basically a `KUBECONFIG` file).
-The sequence diagram is almost identical to the above one except for the method used within the k8s API.
-
-```mermaid
-sequenceDiagram
-    title User uses kube config to submit a workflow
-    participant User
-    participant KubeAPI as API Kubernetes
-    participant ArgoServer as Argo Server
-
-    Note over User,KubeAPI: k8s service account token retrieval
-    User->>KubeAPI: [Kube config] Authentication + service account + namespace (k8s_cluster.v1.create_namespaced_service_account_token(service_account, namespace, body=client.AuthenticationV1TokenRequest(...))
-    KubeAPI-->>User: Argo token (success/failed)
-
-    Note over User,ArgoServer: submission of workflow to argo server
-    User->>ArgoServer: [Workflow + Argo token + namespace] Workflow submission
-    ArgoServer-->>User: (success/failed)
-```
-
-https://argo-workflows.readthedocs.io/en/latest/managed-namespace/
-
-### Notes concerning ArgoServer vs ArgoController vs KubeAPI
-
-The sequence diagram goes
-
-```mermaid
-sequenceDiagram
-    title Worflow submission process (post authentication)
-    participant User
-    participant KubeAPI as API Kubernetes
-    participant ArgoServer as Argo Server
-    participant ArgoController as Argo Controller
-
-    User->>ArgoServer: [WF + Argo token + namespace] Workflow submission
-    ArgoServer->>ArgoServer: [Argo token] Token verification (rights + token validity)
-    ArgoServer->>ArgoController: [WF, namespace] Workflow submission
-    ArgoController->> KubeAPI: [Ressources + namespace] Workflow creation
-    KubeAPI-->>ArgoController: Ressources deployed (success/failed)
-    ArgoController-->>ArgoServer: (success/failed)
-
-    ArgoServer-->>User: (success/failed)
-```
-
-### K8s Prerequisites
-
-- Retrieve a KUBECONFIG file
-- Retrieve a kubernetes **namespace** on which the user (associated to your KUBECONFIG file) has the rights of usage.
-
-Note: if k8s cluster admin chose to use Rancher, to create a projet and to create an associated namespace (within the project), then your admin might have chose to grant rights to that namespace by using [role bindings](https://kubernetes.io/docs/reference/access-authn-authz/rbac/).
-
-### Working on Argo
-
-- Ask the administrators to grant you access to the Argo service by providing your project and namespace
-
-From this point, you are now authorized and autonomous to submit your workflows on Argo.
-
-#### Submitting a workflow
-
-##### Using the kubeconfig file
-
-- Download the kubeconfig file of your cluster from Rancher
-
-INFO: The kubeconfig file is a configuration file that contains authentication information for accessing a Kubernetes cluster.
-It is used by the kubectl command-line tool to communicate with the cluster.
-It grants you the rights to perform any actions within your namespace.
-
-##### Using the Argo token
-
-Warning: the Argo token might not give you the access to the cluster. It is used to submit workflows on the Argo server.
-You may not to be able to check some information about the cluster.
-
-- Read the [Argo Workflows manual](https://argo-workflows.readthedocs.io/en/stable/quick-start/)
+At some point, some [notes documenting the Hera Authentication process](./doc/Notes.md) were written. They are probably outdated though...
